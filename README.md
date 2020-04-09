@@ -1,2 +1,2 @@
-# DBass_RideShareAPI
-DBaas Service for RideShare API
+# DBaaS_RideShareAPI
+DBaaS Service for RideShare API
