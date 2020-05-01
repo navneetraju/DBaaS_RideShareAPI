@@ -1,0 +1,8 @@
+flask
+Flask-MySQLdb
+Flask-APScheduler
+requests
+ipython
+pika
+kazoo
+docker

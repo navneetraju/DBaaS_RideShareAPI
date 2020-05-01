@@ -1,0 +1,5 @@
+ipython
+mysql-connector
+pika
+kazoo
+docker

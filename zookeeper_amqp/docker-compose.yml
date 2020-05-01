@@ -1,0 +1,47 @@
+version: '3.1'
+
+services:
+  
+  count_db:
+    image: mysql:5.7
+    ports:
+      - "32000:3306"
+    environment:
+      MYSQL_USER: user
+      MYSQL_ROOT_PASSWORD: 123
+      MYSQL_PASSWORD: 123
+      MYSQL_DATABASE: db_count
+    volumes:
+      - ./database:/tmp/database
+    command: mysqld --init-file="/tmp/database/db_count.sql"
+
+  rmq:
+    image: rabbitmq:3.8.3-alpine
+
+  website:
+    build: .
+    ports:
+      - '80:80'
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - .:/code
+    links:
+      - rmq
+      - count_db
+    depends_on:
+      - rmq
+
+  consumer:
+    build:
+        context: ms
+        dockerfile: Dockerfile
+    command: sh -c "/code/script.sh && sleep 15 && exec python app.py"
+    volumes:
+    - .:/code
+    - "/var/run/docker.sock:/var/run/docker.sock"
+    links:
+    - rmq
+    - website
+    depends_on:
+    - rmq
+    - website
