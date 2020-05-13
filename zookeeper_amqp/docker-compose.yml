@@ -1,7 +1,16 @@
 version: '3.1'
 
 services:
-  
+  zoo:
+    image: zookeeper
+    restart: on-failure
+    hostname: zoo
+    ports:
+      - 2181:2181
+    environment:
+      ZOO_MY_ID: 1
+      ZOO_SERVERS: server.1=0.0.0.0:2888:3888;2181
+
   count_db:
     image: mysql:5.7
     ports:
@@ -28,8 +37,10 @@ services:
     links:
       - rmq
       - count_db
+      - zoo
     depends_on:
       - rmq
+      - zoo
 
   consumer:
     build:
@@ -42,6 +53,8 @@ services:
     links:
     - rmq
     - website
+    - zoo
     depends_on:
     - rmq
     - website
+    - zoo

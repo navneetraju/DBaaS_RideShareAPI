@@ -12,11 +12,79 @@ import math
 from flask_mysqldb import MySQL
 from flask_apscheduler import APScheduler
 import os
+from kazoo.client import KazooClient
+from kazoo.client import KazooState
+
+
+print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++==========================++++++++++++++++++++++++++=')
+zk = KazooClient(hosts='zoo:2181')
+zk.start()
+zk.ensure_path("/slaves")
+prev=list()
+
+def spawn_containers(diff,temp):
+        for i in range(diff):
+            new_cont_name='zookeeper_amqp_consumer_'+str(temp+1)
+            temp+=1
+            print('------------------------------NEW CONTAINER')
+            client=docker.from_env()  
+            master_pid=min(requests.post('http://127.0.0.1:80/api/v1/worker/list').json())                                                                                           	
+            all_c_list=client.containers.list()
+            for i in all_c_list:
+                c_name=i.name
+                x=re.search("consumer+",c_name)
+                if(x):
+                    if int(i.top()['Processes'][0][1])==master_pid:
+                        master_cont_obj=i
+            print('MASTER container------------------------- ',master_cont_obj.name)
+            master_cont_obj.exec_run("sh -c 'mysqldump -u root user_rides > data.sql'",stdout=False)
+            client=docker.from_env()
+            container=client.containers.run(
+                    image='zookeeper_amqp_consumer',
+                    detach=True,
+                    command=" sh -c '/code/worker.sh && sleep 15 && exec python app.py'",
+                    volumes={'/home/ubuntu/zookeeper_amqp':{'bind':'/code','mode':'rw'},
+                    '/var/run/docker.sock':{'bind':'/var/run/docker.sock','mode':'rw'}
+                    },
+                    name=new_cont_name,
+                    network='zookeeper_amqp_default'
+            )
+            container.logs()
+
+
+
+@zk.ChildrenWatch('/slaves',send_event=True)
+def demo_func(children, event):
+    if(event!=None):
+        global prev
+        print('Children: ',children)
+        print('Prev: ',prev)
+        if(len(prev)>len(children)):
+            num_count=requests.post('http://127.0.0.1:80/get_count').json()
+            num_count=int(num_count)
+            if num_count==0:
+                num_workers=1
+            else:
+                num_workers=math.ceil(num_count/20)
+            work=requests.get('http://127.0.0.1:80/api/v1/worker/list')
+            workers=work.json()
+            num_actual_workers=len(workers)-1    
+            diff=num_actual_workers-num_workers
+            if diff == 0:
+                print('NO RESTORATION REQUIRED,SLAVE WAS SHUTDOWN')
+            elif diff<0:
+                diff=abs(diff)
+                print("SLAVE KILLED,RESTORING SLAVE...")
+                temp=num_actual_workers
+                temp+=1
+                spawn_containers(1,temp)
+        prev=children
 
 app= Flask(__name__)
 
 scheduler=APScheduler()
 scheduler.init_app(app)
+
 
 app.config['MYSQL_HOST']	 = 'count_db' 
 app.config['MYSQL_USER']	 = 'user'
@@ -25,6 +93,7 @@ app.config['MYSQL_DB'] 		 = 'db_count'
 app.config['MYSQL_PORT']=3306
 
 mysql=MySQL(app)
+
 
 
 def increment_db_count():
@@ -38,6 +107,9 @@ def increment_visited_count():
         cur.execute("UPDATE `read_db_count` SET count=count + 1 WHERE `name`='visited'")
         mysql.connection.commit()
         cur.close()
+
+
+
 
 @app.route('/get_count',methods=["POST"])
 def get_count():
@@ -80,32 +152,7 @@ def scaling():
         print("SCALING OUT....")
         temp=num_actual_workers
         temp+=1
-        for i in range(diff):
-            new_cont_name='zookeeper_amqp_consumer_'+str(temp+1)
-            temp+=1
-            print('------------------------------NEW CONTAINER')
-            client=docker.from_env()  
-            master_pid=min(requests.post('http://127.0.0.1:80/api/v1/worker/list').json())                                                                                           	
-            all_c_list=client.containers.list()
-            for i in all_c_list:
-                c_name=i.name
-                x=re.search("consumer+",c_name)
-                if(x):
-                    if int(i.top()['Processes'][0][0])==master_pid:
-                        master_cont_obj=i
-            print('MASTER container------------------------- ',master_cont_obj.name)
-            master_cont_obj.exec_run("sh -c 'mysqldump -u root user_rides > data.sql'",stdout=False)
-            client=docker.from_env()
-            client.containers.run(
-                image='zookeeper_amqp_consumer',
-                detach=True,
-                command=" sh -c '/code/worker.sh && sleep 15 && exec python app.py'",
-                volumes={'/c/Users/navne/Desktop/zookeeper_amqp':{'bind':'/code','mode':'rw'},
-                '/var/run/docker.sock':{'bind':'/var/run/docker.sock','mode':'rw'}
-                },
-                name=new_cont_name,
-                network='zookeeper_amqp_default'
-            ) 
+        spawn_containers(diff,temp)
     elif diff>0:
         print("SCALING IN....")
         for i in range(diff):
@@ -174,9 +221,8 @@ def write():
     return jsonify(),200
 
 @app.route("/api/v1/db/clear",methods=["POST","DELETE","PUT"])
-def clr():
-    dic=request.get_json()
-    print(dic)
+def clear():
+    dic={"type":6}
     dic=json.dumps(dic)
     connection=pika.BlockingConnection(pika.ConnectionParameters(host='rmq'))
     channel=connection.channel()
@@ -198,8 +244,8 @@ def read():
         print('--------------------------------------------------------------------------TIMER STARTED---------------------------------------------------------------------------')
         increment_visited_count()
         scheduler.start()
-        app.apscheduler.add_job(func=scaling,trigger='interval',seconds=30,id='scaling_id')
-        app.apscheduler.add_job(func=reset_count_main,trigger='interval',seconds=30,id='db_read_count_id')    
+        app.apscheduler.add_job(func=scaling,trigger='interval',minutes=2,id='scaling_id')
+        app.apscheduler.add_job(func=reset_count_main,trigger='interval',minutes=2,id='db_read_count_id')    
     prev=requests.post('http://127.0.0.1:80/get_count').json()
     print('Initial Count: ',prev)
     increment_db_count()
@@ -211,9 +257,9 @@ def read():
     dic=json.dumps(dic)
     response=read_db_rpc.call(dic)
     response=response.decode("utf-8") 
-    final_dictionary = json.loads(response) 
+    #final_dictionary = json.loads(response) 
     read_db_rpc.connection.close()
-    return jsonify(final_dictionary),200
+    return response,200
 
 @app.route("/utils/reset",methods=["POST"])
 def reset_count():
@@ -239,7 +285,7 @@ def kill():
         c_name=i.name
         x=re.search("consumer+",c_name)
         if(x):
-            if int(i.top()['Processes'][0][0])==least_pid:
+            if int(i.top()['Processes'][0][1])==least_pid:
                 i.kill()
                 client.containers.prune()
                 t=list()
@@ -260,7 +306,7 @@ def kill2():
         c_name=i.name
         x=re.search("consumer+",c_name)
         if(x):
-            if int(i.top()['Processes'][0][0])==max_pid:
+            if int(i.top()['Processes'][0][1])==max_pid:
                 i.kill()
                 client.containers.prune()
                 t=list()
@@ -271,13 +317,14 @@ def kill2():
 @app.route("/api/v1/worker/list",methods=["POST","GET"])
 def list_workers():
     client=docker.from_env()
+    client.containers.prune()
     workers=list()
     all_c_list=client.containers.list()
     for i in all_c_list:
         c_name=i.name
         x=re.search("consumer+",c_name)
         if(x):
-            id=int(i.top()['Processes'][0][0])
+            id=int(i.top()['Processes'][0][1])
             workers.append(id)
     workers.sort()        
     return jsonify(workers)
@@ -285,4 +332,7 @@ def list_workers():
 
 
 if __name__ =="__main__":
+
+    
     app.run(debug=False, use_reloader=False)
+
