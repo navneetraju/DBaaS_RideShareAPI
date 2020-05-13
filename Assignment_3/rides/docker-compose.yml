@@ -1,0 +1,22 @@
+version: '2'
+
+services:
+  website:
+    build: .
+    links:
+      - db_rides
+    ports:
+      - '80:80'
+
+  db_rides:
+    image: mysql:5.7
+    ports:
+      - "32001:3306"
+    environment:
+      MYSQL_USER: user
+      MYSQL_ROOT_PASSWORD: 123
+      MYSQL_PASSWORD: 123
+      MYSQL_DATABASE: rides
+    volumes:
+      - ./database:/tmp/database
+    command: mysqld --init-file="/tmp/database/rides.sql"
