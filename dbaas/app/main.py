@@ -43,7 +43,7 @@ def spawn_containers(diff,temp):
                     image='zookeeper_amqp_consumer',
                     detach=True,
                     command=" sh -c '/code/worker.sh && sleep 15 && exec python app.py'",
-                    volumes={'/home/ubuntu/zookeeper_amqp':{'bind':'/code','mode':'rw'},
+                    volumes={'/home/ubuntu/dbaas':{'bind':'/code','mode':'rw'},
                     '/var/run/docker.sock':{'bind':'/var/run/docker.sock','mode':'rw'}
                     },
                     name=new_cont_name,
