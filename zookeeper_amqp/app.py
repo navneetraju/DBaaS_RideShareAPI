@@ -370,7 +370,7 @@ def watch_master(event):
 def startmaster():
     global newmaster
     newmaster=masterworker()
-	newmaster.master_thread.join()
+    newmaster.master_thread.join()
 if __name__ == "__main__":
     master=0
     global zk
