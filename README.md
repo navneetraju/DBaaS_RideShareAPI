@@ -13,6 +13,6 @@ chmod 0777 *
 ```
 Ensure docker and docker-compose are installed and run:
 ```
-sudo docker-compose up --build up --scale consumer=2  
+sudo docker-compose up --build --scale consumer=2  
 ```
 --scale consumer=2 is given to create 2 workers which based on their PID become master and slave.
