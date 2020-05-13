@@ -1,7 +1,7 @@
 # RideShareAPI
 DBaaS Service for RideShare API
-## DBaaS service
-dbaas folder has to be pushed to an AWS EC2 instance with at least 8GB RAM in order to allow the service to run smoothly and allow for scaling.  
+### DBaaS service
+The DbaaS,users,rides folder have to be pushed to an AWS EC2 instance with at least 8GB RAM in order to allow the service to run smoothly and allow for scaling.   
 The DbaaS service has to run in conjunction with the the users and rides VMs.  
 To run the users/rides on their respective virtual machines,ensure docker and docker-compose is installed and run:
 ```
