@@ -7,7 +7,7 @@ To run the users/rides on their respective virtual machines,ensure docker and do
 ```
 sudo docker-compose up --build  
 ```
-In the DbaaS VM, ensure read-write permissions are given to the root directory by running:
+In the DBaaS VM, ensure read-write permissions are given to the root directory by running:
 ```
 chmod 0777 *  
 ```
